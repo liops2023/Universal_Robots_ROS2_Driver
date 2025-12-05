@@ -61,7 +61,6 @@ def launch_setup(context, *args, **kwargs):
     moveit_config_package = LaunchConfiguration("moveit_config_package")
     moveit_joint_limits_file = LaunchConfiguration("moveit_joint_limits_file")
     moveit_config_file = LaunchConfiguration("moveit_config_file")
-    warehouse_sqlite_path = LaunchConfiguration("warehouse_sqlite_path")
     prefix = LaunchConfiguration("prefix")
     use_sim_time = LaunchConfiguration("use_sim_time")
     launch_rviz = LaunchConfiguration("launch_rviz")
@@ -206,11 +205,6 @@ def launch_setup(context, *args, **kwargs):
         "publish_transforms_updates": True,
     }
 
-    warehouse_ros_config = {
-        "warehouse_plugin": "warehouse_ros_sqlite::DatabaseConnection",
-        "warehouse_host": warehouse_sqlite_path,
-    }
-
     # Start the actual move_group node/action server
     move_group_node = Node(
         package="moveit_ros_move_group",
@@ -227,7 +221,6 @@ def launch_setup(context, *args, **kwargs):
             moveit_controllers,
             planning_scene_monitor_parameters,
             {"use_sim_time": use_sim_time},
-            warehouse_ros_config,
         ],
     )
 
@@ -248,10 +241,6 @@ def launch_setup(context, *args, **kwargs):
             ompl_planning_pipeline_config,
             robot_description_kinematics,
             robot_description_planning,
-            warehouse_ros_config,
-            {
-                "use_sim_time": use_sim_time,
-            },
         ],
     )
 
@@ -365,13 +354,6 @@ def generate_launch_description():
             "moveit_joint_limits_file",
             default_value="joint_limits.yaml",
             description="MoveIt joint limits that augment or override the values from the URDF robot_description.",
-        )
-    )
-    declared_arguments.append(
-        DeclareLaunchArgument(
-            "warehouse_sqlite_path",
-            default_value=os.path.expanduser("~/.ros/warehouse_ros.sqlite"),
-            description="Path where the warehouse database should be stored",
         )
     )
     declared_arguments.append(
