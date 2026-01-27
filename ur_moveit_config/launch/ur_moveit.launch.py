@@ -34,7 +34,7 @@ import yaml
 from pathlib import Path
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, RegisterEventHandler
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler, TimerAction
 from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.substitutions import (
@@ -47,7 +47,7 @@ from launch_ros.substitutions import FindPackageShare
 
 from moveit_configs_utils import MoveItConfigsBuilder
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 
 
 def load_yaml(package_name, file_path):
@@ -129,12 +129,20 @@ def generate_launch_description():
     ld = LaunchDescription()
     ld.add_entity(declare_arguments())
 
-    wait_robot_description = Node(
-        package="ur_robot_driver",
-        executable="wait_for_robot_description",
-        output="screen",
-    )
-    ld.add_action(wait_robot_description)
+    # Newer UR drivers ship a helper executable to wait for the calibrated
+    # robot_description. Fallback to a short delay if it is not available.
+    ur_driver_prefix = get_package_prefix("ur_robot_driver")
+    wait_exec = os.path.join(ur_driver_prefix, "lib", "ur_robot_driver", "wait_for_robot_description")
+    has_wait_exec = os.path.exists(wait_exec)
+
+    wait_robot_description = None
+    if has_wait_exec:
+        wait_robot_description = Node(
+            package="ur_robot_driver",
+            executable="wait_for_robot_description",
+            output="screen",
+        )
+        ld.add_action(wait_robot_description)
 
     move_group_node = Node(
         package="moveit_ros_move_group",
@@ -186,13 +194,17 @@ def generate_launch_description():
         ],
     )
 
-    ld.add_action(
-        RegisterEventHandler(
-            OnProcessExit(
-                target_action=wait_robot_description,
-                on_exit=[move_group_node, rviz_node, servo_node],
-            )
-        ),
-    )
+    if wait_robot_description is not None:
+        ld.add_action(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=wait_robot_description,
+                    on_exit=[move_group_node, rviz_node, servo_node],
+                )
+            ),
+        )
+    else:
+        # Allow the driver to publish parameters before starting MoveIt.
+        ld.add_action(TimerAction(period=3.0, actions=[move_group_node, rviz_node, servo_node]))
 
     return ld
